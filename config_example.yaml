@@ -1,0 +1,39 @@
+# ──────────────────────────────────────────────────────────────
+# Global settings
+# ──────────────────────────────────────────────────────────────
+
+# The Lemmy instance URL and community name
+instance: https://sh.itjust.works
+community: KrobixBots
+
+# Logging & debug
+log_dir: logs
+debug: true              # set to false to silence DEBUG logs
+
+# Optional filters & gating
+toxicity_filter: false   # set to true to enable Detoxify filtering
+max_replies: 10           # max comments/replies per scan loop
+comment_roll: 70         # 1–100; bot only replies when rand ≥ this
+comment_roll_trigger_word: 90 #Same as above, this is roll if a trigger word is found
+reply_delay_min: 30       # seconds between comments (lower)
+reply_delay_max: 120      # seconds between comments (upper)
+initial_post: true   # ← post immediately on startup if true
+banned_words: fag,tranny,nig,retard   #Comment-separated list of words to ban
+
+# ──────────────────────────────────────────────────────────────
+# Bot definitions
+# ──────────────────────────────────────────────────────────────
+
+# model = hugging face user / model -- Username/Model -- huggingface.co/Username/Model -- Copy last part Username/Model and don't leave trailing / at the end.
+# example:
+# model: Username/Model
+
+# postfreq is the amount of HOURS it posts a new thread.
+
+bots:
+  - name: botname
+    model: [model]
+    username: username
+    password: password
+    postfreq: 1
+    temprange: 0.8,1.5
