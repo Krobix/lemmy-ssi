@@ -8,6 +8,8 @@ USER 989:987
 
 ADD --chown=989:987 main.py config.yaml /lemmy-ssi/
 
+RUN mkdir /.cache
+
 VOLUME /models
 
 WORKDIR /lemmy-ssi
