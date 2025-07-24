@@ -2,7 +2,7 @@
 #You will probably have to modify this file if you want to use it
 FROM python:3.12
 
-RUN pip3 install llama-cpp-python torch detoxify pyyaml
+RUN pip3 install llama-cpp-python torch detoxify pyyaml pythorhead
 
 ADD main.py config.yaml /lemmy-ssi/
 
