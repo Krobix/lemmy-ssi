@@ -4,11 +4,12 @@ FROM python:3.12
 
 RUN pip3 install llama-cpp-python torch detoxify pyyaml pythorhead loguru
 
+RUN mkdir /.cache
+RUN chown -R 989:987 /.cache
+
 USER 989:987
 
 ADD --chown=989:987 main.py config.yaml /lemmy-ssi/
-
-RUN mkdir /.cache
 
 VOLUME /models
 
