@@ -101,11 +101,11 @@ class BotThread(threading.Thread):
 
         # Model + tokenizer
         from transformers import AutoTokenizer, AutoModelForCausalLM
-        self.tokenizer = AutoTokenizer.from_pretrained(bot_cfg["model"])
-        self.tokenizer.padding_side = "left"
         if bot_cfg["model"].endswith("gguf"):
             self.model = llama.Llama(bot_cfg["model"], use_mmap=True, use_mlock=True, n_ctx=1024, n_batch=1024, n_threads=6, n_threads_batch=12)
         else:
+            self.tokenizer = AutoTokenizer.from_pretrained(bot_cfg["model"])
+            self.tokenizer.padding_side = "left"
             self.model = AutoModelForCausalLM.from_pretrained(bot_cfg["model"])
             self.model.eval()
 
