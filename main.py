@@ -141,19 +141,21 @@ class BotThread(threading.Thread):
 
     def _gen(self, prompt: str) -> str:
         import warnings
-        inputs = self.tokenizer(prompt, return_tensors="pt")
-        ids = inputs.input_ids
-        attn = inputs.get("attention_mask", None)
-        temp = random.uniform(float(self.temprange[0]), float(self.temprange[1]))
-
-        # empty‑prompt fallback
-        if not prompt.strip() or ids.size(1) == 0:
-            bos = self.tokenizer.bos_token_id or self.tokenizer.eos_token_id
-            ids = torch.tensor([[bos]], device=ids.device)
-            prompt_len = 1
-            attn = torch.ones_like(ids)
+        if type(self.model) is not llama.Llama:
+            inputs = self.tokenizer(prompt, return_tensors="pt")
+            ids = inputs.input_ids
+            attn = inputs.get("attention_mask", None)
+            # empty‑prompt fallback
+            if not prompt.strip() or ids.size(1) == 0:
+                bos = self.tokenizer.bos_token_id or self.tokenizer.eos_token_id
+                ids = torch.tensor([[bos]], device=ids.device)
+                prompt_len = 1
+                attn = torch.ones_like(ids)
+            else:
+                prompt_len = ids.size(1)
         else:
-            prompt_len = ids.size(1)
+            prompt_len = self.model.tokenize(prompt.encode('utf-8'))
+        temp = random.uniform(float(self.temprange[0]), float(self.temprange[1]))
 
         max_new = max(16, 1024 - prompt_len)
         for _ in range(4):
