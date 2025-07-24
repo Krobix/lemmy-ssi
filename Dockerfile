@@ -4,9 +4,9 @@ FROM python:3.12
 
 RUN pip3 install llama-cpp-python torch detoxify pyyaml pythorhead loguru
 
-ADD main.py config.yaml /lemmy-ssi/
-
 USER 989:987
+
+ADD main.py config.yaml /lemmy-ssi/
 
 VOLUME /models
 
