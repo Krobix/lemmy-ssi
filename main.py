@@ -154,7 +154,7 @@ class BotThread(threading.Thread):
             else:
                 prompt_len = ids.size(1)
         else:
-            prompt_len = self.model.tokenize(prompt.encode('utf-8'))
+            prompt_len = len(self.model.tokenize(prompt.encode('utf-8')))
         temp = random.uniform(float(self.temprange[0]), float(self.temprange[1]))
 
         max_new = max(16, 1024 - prompt_len)
