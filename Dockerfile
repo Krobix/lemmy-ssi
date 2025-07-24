@@ -4,6 +4,8 @@ FROM python:3.12
 
 RUN pip3 install llama-cpp-python torch detoxify pyyaml pythorhead loguru
 
+USER root
+
 RUN mkdir /.cache
 RUN chown -R 989:987 /.cache
 
