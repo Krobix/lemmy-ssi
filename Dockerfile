@@ -10,4 +10,6 @@ USER 987:989
 
 VOLUME /models
 
+WORKDIR /lemmy-ssi
+
 CMD ["python3", "/lemmy-ssi/main.py"]
