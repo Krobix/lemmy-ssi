@@ -6,12 +6,10 @@ RUN pip3 install llama-cpp-python torch detoxify pyyaml pythorhead loguru
 
 USER 989:987
 
-ADD main.py config.yaml /lemmy-ssi/
+ADD --chown=989:987 main.py config.yaml /lemmy-ssi/
 
 VOLUME /models
 
 WORKDIR /lemmy-ssi
-
-RUN chown -R 989:987 /lemmy-ssi
 
 CMD ["python3", "/lemmy-ssi/main.py"]
