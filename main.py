@@ -242,8 +242,8 @@ class BotThread(threading.Thread):
                     return ""
             #txt = clean(self.tokenizer.decode(gen_ids, skip_special_tokens=True))
             txt = out
-            while "\n" in txt:
-                txt = txt.replace("\n", " ")
+            while "\\n" in txt:
+                txt = txt.replace("\\n", " ")
             if txt and not self._is_toxic(txt):
                 return txt
         return ""
