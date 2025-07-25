@@ -57,7 +57,7 @@ class BotThread(threading.Thread):
 
         self.badwords = self.global_cfg["banned_words"].strip().split(",")
         self.replied_to = []
-        self.comm_lim = 100
+        self.comm_lim = 500
         self.comm_this_period = 0
 
         self.stop_event = threading.Event()
@@ -149,7 +149,6 @@ class BotThread(threading.Thread):
     def _comment(self, post_id: int, content: str, parent_id: int | None = None) -> None:
         try:
             self.lemmy.comment.create(post_id, content, parent_id=parent_id)
-            self.replied_to.append(parent_id)
             self.log.info("Commented on %d", post_id)
             self.comm_this_period += 1
         except Exception:
@@ -170,9 +169,35 @@ class BotThread(threading.Thread):
         replies.reverse()
         return post, replies
 
+    def _already_replied(self, pv):
+        post_id = pv["post"]["id"]
+        if "comment" in pv:
+            if pv["comment"]["id"] in self.replied_to:
+                return True
+            replies = self.lemmy.comment.list(post_id=post_id, parent_id=pv["comment"]["id"])
+        elif "post" in pv:
+            if pv["post"]["id"] in self.replied_to:
+                return True
+            replies = self.lemmy.comment.list(post_id=post_id, parent_id=post_id)
+        else:
+            return False
+        for r in replies:
+            if "post_view" in r:
+                r = r["post_view"]
+            if "comment_view" in r:
+                r = r["comment_view"]
+            if r["creator"]["name"]==self.cfg["username"]:
+                self.replied_to.append(pv["id"])
+                if len(self.replied_to) > 5000:
+                    self.replied_to = []
+                return True
+        return False
+
     def _attempt_replies(self, sources: list[dict[str, Any]], sub) -> None:
         attempts = 0
         for src in sources:
+            if src["creator"]["name"] == self.cfg["username"]:
+                continue
             if "comment" in src:
                 post, replies = self._org_thread(src)
                 #self.log.info(post)
@@ -247,7 +272,7 @@ class BotThread(threading.Thread):
 
             if self.comm_this_period < self.comm_lim:
                 for pv in iter_post_views(feed):
-                    if pv["post"]["id"] in self.replied_to:
+                    if self._already_replied(pv):
                         continue
                     posts.append(pv)
                 sub = random.choice(self.subreplace)
@@ -259,7 +284,7 @@ class BotThread(threading.Thread):
                 )
                 comments = []
                 for cv in iter_comment_views(cfeed):
-                    if cv["comment"]["id"] in self.replied_to:
+                    if self._already_replied(cv):
                         continue
                     comments.append(cv)
                 self._attempt_replies(comments, sub=sub)
