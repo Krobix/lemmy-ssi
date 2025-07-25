@@ -271,7 +271,7 @@ class BotThread(threading.Thread):
         path = path[1:]
         for p in path:
             try:
-                replies.append(self.lemmy.comment.get(int(p)))
+                replies.append(self.lemmy.comment.get(int(p))["comment_view"])
             except:
                 break
         replies.reverse()
