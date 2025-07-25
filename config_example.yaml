@@ -37,3 +37,5 @@ bots:
     password: password
     postfreq: 1
     temprange: 0.8,1.5
+    subreplace: funny,pics
+    nsfw: false

@@ -84,6 +84,51 @@ def iter_comment_views(raw: Any):
             else:
                 yield {"comment": item, "creator": {"name": item.get("creator_name","")}}
 
+
+def convert_post(title, text, sub, is_self=True, end_tag=False):
+    out = ""
+
+    if is_self:
+        out += f"<|soss r/{sub}|>"
+    else:
+        out += f"<|sols r/{sub}|>"
+
+    out += f"<|sot|>{title}"
+
+    if is_self:
+        out += f"<|sost|>{text}"
+    if end_tag:
+        if is_self:
+            out += "<|eoss|>"
+        else:
+            out += "<|eols|>"
+    return out
+
+def convert_thread(post, replies, sub, is_self=True):
+    out = convert_post(post["post"]["name"], post["post"]["body"], sub, end_tag=False)
+    if out is None:
+        return None
+
+    parent_author = None
+    parent_2_author = None
+    for r in replies:
+        if r['creator']["name"] == post['creator']["name"]:
+            out += "<|soopr|>"
+        elif r['creator']["name"] == parent_2_author:
+            out += "<|soocr|>"
+        else:
+            out += f"<|sor u/{r['creator']["name"]}|>"
+        out += r["comment"]['content']
+        parent_2_author = parent_author
+        parent_author = r['creator']["name"]
+
+    #if is_self:
+    #    out += "<|eoss|><|endoftext|>\n"
+    #else:
+    #    out += "<|eols|><|endoftext|>\n"
+    # print("Thread converted")
+    return out
+
 # ------------------------------------------------------------------ #
 #  Bot Thread                                                      #
 # ------------------------------------------------------------------ #
@@ -98,6 +143,9 @@ class BotThread(threading.Thread):
         self.lemmy = Lemmy(global_cfg["instance"])
         self.lemmy.log_in(bot_cfg["username"], bot_cfg["password"])
         self.community_id = self.lemmy.discover_community(global_cfg["community"])
+
+        self.subreplace = self.cfg["subreplace"].strip().split(",")
+        self.nsfw = self.cfg["nsfw"]
 
         # Model + tokenizer
         from transformers import AutoTokenizer, AutoModelForCausalLM
@@ -141,6 +189,7 @@ class BotThread(threading.Thread):
 
     def _gen(self, prompt: str) -> str:
         import warnings
+        #print(f"Prompt:\n{prompt}\n\n")
         if type(self.model) is not llama.Llama:
             inputs = self.tokenizer(prompt, return_tensors="pt")
             ids = inputs.input_ids
@@ -184,18 +233,21 @@ class BotThread(threading.Thread):
                             top_p=0.9,
                             pad_token_id=self.tokenizer.eos_token_id,
                         )
-            gen_ids = out[0, prompt_len:]
+            gen_ids = out[len(prompt):]
             for b in self.badwords:
                 if b in out:
                     return ""
-            txt = clean(self.tokenizer.decode(gen_ids, skip_special_tokens=True))
+            #txt = clean(self.tokenizer.decode(gen_ids, skip_special_tokens=True))
+            txt = out
+            while "\n" in txt:
+                txt = txt.replace("\n", " ")
             if txt and not self._is_toxic(txt):
                 return txt
         return ""
 
     def _post(self, title: str, body: str) -> int | None:
         try:
-            res = self.lemmy.post.create(self.community_id, title, body=body)
+            res = self.lemmy.post.create(self.community_id, title, body=body, nsfw=self.nsfw)
             pid = res["post_view"]["post"]["id"]
             self.log.info("Posted: %s", title)
             return pid
@@ -210,22 +262,48 @@ class BotThread(threading.Thread):
         except Exception:
             self.log.exception("comment failed")
 
-    def _attempt_replies(self, sources: list[dict[str, Any]]) -> None:
+    def _org_thread(self, c):
+        post = self.lemmy.post.get(post_id=c["comment"]["post_id"])["post_view"]
+        replies = [c]
+        path = c["comment"]["path"].strip().split(".")
+        path.pop(0)
+        path.reverse()
+        path = path[1:]
+        for p in path:
+            try:
+                replies.append(self.lemmy.comment.get(int(p)))
+            except:
+                break
+        replies.reverse()
+        return post, replies
+
+    def _attempt_replies(self, sources: list[dict[str, Any]], sub) -> None:
         attempts = 0
         for src in sources:
+            if "comment" in src:
+                post, replies = self._org_thread(src)
+                #self.log.info(post)
+                p = convert_thread(post, replies, sub) + f"<|sor u/{src['creator']['name']}|>"
+            elif "post" in src:
+                p = convert_post(title=src["post"]["name"], text=src["post"]["body"], sub=sub) + f"<|sor u/{src['creator']['name']}|>"
+            else:
+                continue
             if attempts >= self.max_replies:
                 break
             if random.randint(1, 100) < self.roll_needed:
                 continue
             reply = ""
             for _ in range(3):
-                candidate = self._gen(src["text"]).strip()
+                candidate = self._gen(p).strip()
                 if candidate:
                     reply = candidate
                     break
             if not reply:
                 continue
-            self._comment(src["post_id"], reply, parent_id=src["parent_id"])
+            if "post" in src:
+                self._comment(src["post"]["id"], reply, parent_id=src["post"]["id"])
+            else:
+                self._comment(src["comment"]["post_id"], reply, parent_id=src["comment"]["id"])
             attempts += 1
             time.sleep(random.uniform(self.delay_min, self.delay_max))
 
@@ -237,8 +315,9 @@ class BotThread(threading.Thread):
             if self.initial_post or (now - self.last_post_at) >= self.freq_s:
                 # Try to generate a title up to 3 times
                 title = ""
+                sub = random.choice(self.subreplace)
                 for _ in range(3):
-                    raw = self._gen("")
+                    raw = self._gen(f"<|soss r/{sub}|><|sot|>")
                     c = raw.splitlines()[0][:200].strip()
                     c = re.sub(r"[<>|].*?$", "", c)
                     if c and c != "Untitled 🤔":
@@ -253,7 +332,7 @@ class BotThread(threading.Thread):
                 # generate body by using title as the prompt
                 body = ""
                 for _ in range(3):
-                    candidate = self._gen(title).strip()
+                    candidate = self._gen(f"<|soss r/{sub}|><|sot|>{title}<|eot|><|sost|>").strip()
                     # ensure it didn’t just echo the title
                     if candidate and candidate.lower() != title.lower():
                         body = candidate
@@ -270,27 +349,20 @@ class BotThread(threading.Thread):
                 page=1, limit=self.max_replies * 3,
                 sort=SortType.New, community_id=self.community_id
             )
-            posts = [
-                {"post_id": pv["post"]["id"],
-                 "text": pv["post"]["name"]+"\n"+pv["post"].get("body",""),
-                 "parent_id": None}
-                for pv in iter_post_views(feed)
-                if pv["creator"]["name"] != self.cfg["username"]
-            ]
-            self._attempt_replies(posts)
+            posts = []
+            for pv in iter_post_views(feed):
+                posts.append(pv)
+            sub = random.choice(self.subreplace)
+            self._attempt_replies(posts, sub=sub)
 
             cfeed = self.lemmy.comment.list(
                 community_id=self.community_id,
                 sort=SortType.New, page=1, limit=self.max_replies * 3
             )
-            comments = [
-                {"post_id": cv["comment"]["post_id"],
-                 "text": cv["comment"]["content"],
-                 "parent_id": cv["comment"]["id"]}
-                for cv in iter_comment_views(cfeed)
-                if cv["creator"]["name"] != self.cfg["username"]
-            ]
-            self._attempt_replies(comments)
+            comments = []
+            for cv in iter_comment_views(cfeed):
+                comments.append(cv)
+            self._attempt_replies(comments, sub=sub)
 
             time.sleep(5)
 
