@@ -172,22 +172,23 @@ class BotThread(threading.Thread):
     def _already_replied(self, pv):
         post_id = pv["post"]["id"]
         if "comment" in pv:
-            if pv["comment"]["id"] in self.replied_to:
-                return True
-            replies = self.lemmy.comment.list(post_id=post_id, parent_id=pv["comment"]["id"])
+            parent_id = pv["comment"]["id"]
         elif "post" in pv:
-            if pv["post"]["id"] in self.replied_to:
-                return True
-            replies = self.lemmy.comment.list(post_id=post_id, parent_id=post_id)
+            parent_id = pv["post"]["id"]
         else:
             return False
+
+        if parent_id in self.replied_to:
+            return True
+
+        replies = self.lemmy.comment.list(post_id=post_id, parent_id=parent_id)
         for r in replies:
             if "post_view" in r:
                 r = r["post_view"]
             if "comment_view" in r:
                 r = r["comment_view"]
             if r["creator"]["name"]==self.cfg["username"]:
-                self.replied_to.append(pv["id"])
+                self.replied_to.append(parent_id)
                 if len(self.replied_to) > 5000:
                     self.replied_to = []
                 return True
