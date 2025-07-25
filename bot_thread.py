@@ -1,9 +1,7 @@
 import threading, logging, random
-
-
 from types import MappingProxyType
-
 import torch
+import time
 from detoxify import Detoxify
 from pythorhead import Lemmy
 import llama_cpp as llama
@@ -59,7 +57,7 @@ class BotThread(threading.Thread):
 
         self.badwords = self.global_cfg["banned_words"].strip().split(",")
         self.replied_to = []
-        self.comm_lim = 50
+        self.comm_lim = 100
         self.comm_this_period = 0
 
         self.stop_event = threading.Event()
@@ -266,5 +264,4 @@ class BotThread(threading.Thread):
                     comments.append(cv)
                 self._attempt_replies(comments, sub=sub)
 
-            time.sleep(30)
-
+            time.sleep(300)
