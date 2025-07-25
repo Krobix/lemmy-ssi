@@ -215,8 +215,16 @@ class BotThread(threading.Thread):
                 with warnings.catch_warnings():
                     warnings.filterwarnings("ignore", category=UserWarning)
                     if type(self.model) is llama.Llama:
-                        out = self.model(prompt=prompt, temperature=float(temp), max_tokens=1024, stop=["<|"])["choices"][0]["text"]
-                        out = str(out)
+                        try:
+                            tokens = self.model.tokenize(prompt.encode("utf-8"))
+                            tokens.reverse()
+                            tokens = tokens[:1000]
+                            tokens.reverse()
+                            prompt = self.model.detokenize(tokens).decode("utf-8")
+                            out = self.model(prompt=prompt, temperature=float(temp), max_tokens=1024, stop=["<|"])["choices"][0]["text"]
+                            out = str(out)
+                        except RuntimeError:
+                            continue
                         #if out.endswith("<|"):
                         #    out = out[:len(out) - 2]
                         #if prompt.endswith("<|sot|>") and prompt.startswith("<|soss"):
