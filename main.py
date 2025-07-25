@@ -305,10 +305,10 @@ class BotThread(threading.Thread):
                     break
             if not reply:
                 continue
-            if "post" in src:
-                self._comment(src["post"]["id"], reply, parent_id=src["post"]["id"])
-            else:
+            if "comment" in src:
                 self._comment(src["comment"]["post_id"], reply, parent_id=src["comment"]["id"])
+            else:
+                self._comment(src["post"]["id"], reply, parent_id=src["post"]["id"])
             attempts += 1
             time.sleep(random.uniform(self.delay_min, self.delay_max))
 
