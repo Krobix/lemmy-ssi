@@ -73,8 +73,8 @@ class BotThread(threading.Thread):
 
     def _gen(self, prompt: str) -> str:
         import warnings
-        self.log.debug(f"Prompt:\n{prompt}\n\n")
         with self.genlock:
+            self.log.debug(f"Prompt:\n{prompt}\n\n")
             if type(self.model) is not llama.Llama:
                 inputs = self.tokenizer(prompt, return_tensors="pt")
                 ids = inputs.input_ids
