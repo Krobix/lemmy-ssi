@@ -174,16 +174,18 @@ class BotThread(threading.Thread):
         if "comment" in pv:
             parent_id = pv["comment"]["id"]
             parid = parent_id
+            max_depth = 10
         elif "post" in pv:
             parent_id = pv["post"]["id"]
             parid = None
+            max_depth = 1
         else:
             return False
 
         if parent_id in self.replied_to:
             return True
 
-        replies = self.lemmy.comment.list(post_id=post_id, parent_id=parid)
+        replies = self.lemmy.comment.list(post_id=post_id, parent_id=parid, max_depth=max_depth, limit=500)
         self.log.debug(f"Got {len(replies)} replies to pv")
         for r in replies:
             if "post_view" in r:
