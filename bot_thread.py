@@ -13,7 +13,7 @@ SortType = get_sort_type()
 #  Bot Thread                                                      #
 # ------------------------------------------------------------------ #
 class BotThread(threading.Thread):
-    def __init__(self, bot_cfg: MappingProxyType, global_cfg: MappingProxyType):
+    def __init__(self, bot_cfg: MappingProxyType, global_cfg: MappingProxyType, genlock):
         super().__init__(daemon=True, name=bot_cfg["name"])
         self.cfg = bot_cfg
         self.global_cfg = global_cfg
@@ -61,6 +61,7 @@ class BotThread(threading.Thread):
         self.comm_this_period = 0
 
         self.stop_event = threading.Event()
+        self.genlock = genlock
 
     def _is_toxic(self, txt: str, thresh: float = 0.9) -> bool:
         if not self.filter_toxic:
@@ -72,69 +73,70 @@ class BotThread(threading.Thread):
 
     def _gen(self, prompt: str) -> str:
         import warnings
-        #print(f"Prompt:\n{prompt}\n\n")
-        if type(self.model) is not llama.Llama:
-            inputs = self.tokenizer(prompt, return_tensors="pt")
-            ids = inputs.input_ids
-            attn = inputs.get("attention_mask", None)
-            # empty‑prompt fallback
-            if not prompt.strip() or ids.size(1) == 0:
-                bos = self.tokenizer.bos_token_id or self.tokenizer.eos_token_id
-                ids = torch.tensor([[bos]], device=ids.device)
-                prompt_len = 1
-                attn = torch.ones_like(ids)
+        self.log.debug(f"Prompt:\n{prompt}\n\n")
+        with self.genlock:
+            if type(self.model) is not llama.Llama:
+                inputs = self.tokenizer(prompt, return_tensors="pt")
+                ids = inputs.input_ids
+                attn = inputs.get("attention_mask", None)
+                # empty‑prompt fallback
+                if not prompt.strip() or ids.size(1) == 0:
+                    bos = self.tokenizer.bos_token_id or self.tokenizer.eos_token_id
+                    ids = torch.tensor([[bos]], device=ids.device)
+                    prompt_len = 1
+                    attn = torch.ones_like(ids)
+                else:
+                    prompt_len = ids.size(1)
             else:
-                prompt_len = ids.size(1)
-        else:
-            prompt_len = len(self.model.tokenize(prompt.encode('utf-8')))
-        temp = random.uniform(float(self.temprange[0]), float(self.temprange[1]))
+                prompt_len = len(self.model.tokenize(prompt.encode('utf-8')))
+            temp = random.uniform(float(self.temprange[0]), float(self.temprange[1]))
 
-        max_new = max(16, 1024 - prompt_len)
-        for _ in range(4):
-            with torch.no_grad():
-                with warnings.catch_warnings():
-                    warnings.filterwarnings("ignore", category=UserWarning)
-                    if type(self.model) is llama.Llama:
-                        try:
-                            tokens = self.model.tokenize(prompt.encode("utf-8"))
-                            tokens.reverse()
-                            tokens = tokens[:1000]
-                            tokens.reverse()
-                            prompt = self.model.detokenize(tokens).decode("utf-8")
-                            out = self.model(prompt=prompt, temperature=float(temp), max_tokens=1024, stop=["<|"])["choices"][0]["text"]
-                            out = str(out)
-                        except RuntimeError:
-                            continue
-                        #if out.endswith("<|"):
-                        #    out = out[:len(out) - 2]
-                        #if prompt.endswith("<|sot|>") and prompt.startswith("<|soss"):
-                        #    logging.info("Title generated for text post, proceeding to generate text post body")
-                        #    out = str(out) + "<|eot|><|sost|>"
-                        #    out += str(self.model(prompt=out, temperature=float(temp), max_tokens=1024,
-                        #                        stop=["<|"])["choices"][0]["text"])
-                        #if not out.endswith("<|"):
-                        #    out += "<|"
-                    else:
-                        out = self.model.generate(
-                            ids,
-                            attention_mask=attn,
-                            max_new_tokens=max_new,
-                            do_sample=True,
-                            temperature=0.9,
-                            top_p=0.9,
-                            pad_token_id=self.tokenizer.eos_token_id,
-                        )
-            gen_ids = out[len(prompt):]
-            for b in self.badwords:
-                if b in out:
-                    return ""
-            #txt = clean(self.tokenizer.decode(gen_ids, skip_special_tokens=True))
-            txt = out
-            while "\\n" in txt:
-                txt = txt.replace("\\n", " ")
-            if txt and not self._is_toxic(txt):
-                return txt
-        return ""
+            max_new = max(16, 1024 - prompt_len)
+            for _ in range(4):
+                with torch.no_grad():
+                    with warnings.catch_warnings():
+                        warnings.filterwarnings("ignore", category=UserWarning)
+                        if type(self.model) is llama.Llama:
+                            try:
+                                tokens = self.model.tokenize(prompt.encode("utf-8"))
+                                tokens.reverse()
+                                tokens = tokens[:1000]
+                                tokens.reverse()
+                                prompt = self.model.detokenize(tokens).decode("utf-8")
+                                out = self.model(prompt=prompt, temperature=float(temp), max_tokens=1024, stop=["<|"])["choices"][0]["text"]
+                                out = str(out)
+                            except RuntimeError:
+                                continue
+                            #if out.endswith("<|"):
+                            #    out = out[:len(out) - 2]
+                            #if prompt.endswith("<|sot|>") and prompt.startswith("<|soss"):
+                            #    logging.info("Title generated for text post, proceeding to generate text post body")
+                            #    out = str(out) + "<|eot|><|sost|>"
+                            #    out += str(self.model(prompt=out, temperature=float(temp), max_tokens=1024,
+                            #                        stop=["<|"])["choices"][0]["text"])
+                            #if not out.endswith("<|"):
+                            #    out += "<|"
+                        else:
+                            out = self.model.generate(
+                                ids,
+                                attention_mask=attn,
+                                max_new_tokens=max_new,
+                                do_sample=True,
+                                temperature=0.9,
+                                top_p=0.9,
+                                pad_token_id=self.tokenizer.eos_token_id,
+                            )
+                gen_ids = out[len(prompt):]
+                for b in self.badwords:
+                    if b in out:
+                        return ""
+                #txt = clean(self.tokenizer.decode(gen_ids, skip_special_tokens=True))
+                txt = out
+                while "\\n" in txt:
+                    txt = txt.replace("\\n", " ")
+                if txt and not self._is_toxic(txt):
+                    return txt
+            return ""
 
     def _post(self, title: str, body: str) -> int | None:
         try:

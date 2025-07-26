@@ -16,12 +16,14 @@ from pathlib import Path
 from types import MappingProxyType
 import yaml
 from bot_thread import BotThread
+from threading import Lock
 
 # ------------------------------------------------------------------ #
 #  Entrypoint                                                      #
 # ------------------------------------------------------------------ #
 def main(cfg_path: str) -> None:
     cfg = yaml.safe_load(Path(cfg_path).read_text(encoding="utf-8"))
+    genlock = Lock()
 
     log_dir = Path(cfg.get("log_dir","logs"))
     log_dir.mkdir(exist_ok=True)
@@ -39,7 +41,7 @@ def main(cfg_path: str) -> None:
     logging.getLogger().addHandler(console)
 
     threads = [
-        BotThread(MappingProxyType(b), MappingProxyType(cfg))
+        BotThread(MappingProxyType(b), MappingProxyType(cfg), genlock)
         for b in cfg["bots"]
     ]
     for t in threads:
