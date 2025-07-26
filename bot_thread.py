@@ -102,7 +102,10 @@ class BotThread(threading.Thread):
                                 tokens.reverse()
                                 tokens = tokens[:1000]
                                 tokens.reverse()
-                                prompt = self.model.detokenize(tokens).decode("utf-8")
+                                try:
+                                    prompt = self.model.detokenize(tokens).decode("utf-8")
+                                except UnicodeDecodeError:
+                                    return ""
                                 out = self.model(prompt=prompt, temperature=float(temp), max_tokens=1024, stop=["<|"])["choices"][0]["text"]
                                 out = str(out)
                             except RuntimeError:
