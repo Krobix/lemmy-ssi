@@ -214,12 +214,15 @@ class BotThread(threading.Thread):
                 post, replies = self._org_thread(src)
                 #self.log.info(post)
                 p = convert_thread(post, replies, sub) + f"<|sor u/{self.cfg['username']}|>"
+                parent_id = src["comment"]["id"]
             elif "post" in src:
                 p = convert_post(title=src["post"]["name"], text=src["post"]["body"], sub=sub) + f"<|sor u/{self.cfg["username"]}|>"
+                parent_id = src["post"]["id"]
             else:
                 continue
             if attempts >= self.max_replies:
                 break
+            random.seed(parent_id)
             if random.randint(1, 100) < self.roll_needed:
                 continue
             reply = ""
