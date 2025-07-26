@@ -213,9 +213,9 @@ class BotThread(threading.Thread):
             if "comment" in src:
                 post, replies = self._org_thread(src)
                 #self.log.info(post)
-                p = convert_thread(post, replies, sub) + f"<|sor u/{src['creator']['name']}|>"
+                p = convert_thread(post, replies, sub) + f"<|sor u/{self.cfg['username']}|>"
             elif "post" in src:
-                p = convert_post(title=src["post"]["name"], text=src["post"]["body"], sub=sub) + f"<|sor u/{src['creator']['name']}|>"
+                p = convert_post(title=src["post"]["name"], text=src["post"]["body"], sub=sub) + f"<|sor u/{self.cfg["username"]}|>"
             else:
                 continue
             if attempts >= self.max_replies:
