@@ -1,11 +1,13 @@
 #for running bots in a docker container
 #You will probably have to modify this file if you want to use it
-FROM python:3.12
+FROM python:3.12-bookworm
 
-ARG CMAKE_ARGS="-DGGML_BLAS=ON -DGGML_BLAS_VENDOR=OpenBLAS"
+ENV CMAKE_ARGS="-DGGML_BLAS=ON -DGGML_BLAS_VENDOR=OpenBLAS"
 
-RUN apt install libopenblas-dev
-RUN pip3 install llama-cpp-python torch detoxify pyyaml pythorhead loguru
+RUN apt update -y
+RUN apt install -y libopenblas-dev
+RUN pip3 install torch detoxify pyyaml pythorhead loguru
+RUN pip3 install --no-binary llama-cpp-python llama-cpp-python
 
 USER root
 
