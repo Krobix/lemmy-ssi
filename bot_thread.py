@@ -173,15 +173,18 @@ class BotThread(threading.Thread):
         post_id = pv["post"]["id"]
         if "comment" in pv:
             parent_id = pv["comment"]["id"]
+            parid = parent_id
         elif "post" in pv:
             parent_id = pv["post"]["id"]
+            parid = None
         else:
             return False
 
         if parent_id in self.replied_to:
             return True
 
-        replies = self.lemmy.comment.list(post_id=post_id, parent_id=parent_id)
+        replies = self.lemmy.comment.list(post_id=post_id, parent_id=parid)
+        self.log.debug(f"Got {len(replies)} replies to pv")
         for r in replies:
             if "post_view" in r:
                 r = r["post_view"]
@@ -191,6 +194,7 @@ class BotThread(threading.Thread):
                 self.replied_to.append(parent_id)
                 if len(self.replied_to) > 5000:
                     self.replied_to = []
+                self.log.debug(f"Already replied")
                 return True
         return False
 
