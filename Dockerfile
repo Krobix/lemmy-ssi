@@ -2,6 +2,9 @@
 #You will probably have to modify this file if you want to use it
 FROM python:3.12
 
+ARG CMAKE_ARGS="-DGGML_BLAS=ON -DGGML_BLAS_VENDOR=OpenBLAS"
+
+RUN apt install libopenblas-dev
 RUN pip3 install llama-cpp-python torch detoxify pyyaml pythorhead loguru
 
 USER root
