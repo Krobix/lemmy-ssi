@@ -73,6 +73,7 @@ class BotThread(threading.Thread):
 
     def _gen(self, prompt: str) -> str:
         import warnings
+        random.seed()
         with self.genlock:
             self.log.debug(f"Prompt:\n{prompt}\n\n")
             if type(self.model) is not llama.Llama:
@@ -106,7 +107,7 @@ class BotThread(threading.Thread):
                                     prompt = self.model.detokenize(tokens).decode("utf-8")
                                 except UnicodeDecodeError:
                                     return ""
-                                out = self.model(prompt=prompt, temperature=float(temp), max_tokens=1024, stop=["<|"])["choices"][0]["text"]
+                                out = self.model(prompt=prompt, temperature=float(temp), max_tokens=1024, stop=["<|"], seed=random.randint(0, 1000))["choices"][0]["text"]
                                 out = str(out)
                             except RuntimeError:
                                 continue
@@ -160,7 +161,11 @@ class BotThread(threading.Thread):
             self.log.exception("comment failed")
 
     def _org_thread(self, c):
-        post = self.lemmy.post.get(post_id=c["comment"]["post_id"])["post_view"]
+        try:
+            post = self.lemmy.post.get(post_id=c["comment"]["post_id"])["post_view"]
+        except TypeError:
+            self.log.debug("_org_thread: comment was None. continuing")
+            return None, None
         replies = [c]
         path = c["comment"]["path"].strip().split(".")
         path.pop(0)
@@ -212,6 +217,7 @@ class BotThread(threading.Thread):
                 continue
             if "comment" in src:
                 post, replies = self._org_thread(src)
+                if post is None: continue
                 #self.log.info(post)
                 p = convert_thread(post, replies, sub) + f"<|sor u/{self.cfg['username']}|>"
                 parent_id = src["comment"]["id"]
