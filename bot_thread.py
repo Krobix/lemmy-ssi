@@ -196,6 +196,7 @@ class BotThread(threading.Thread):
             return True
 
         replies = self.lemmy.comment.list(post_id=post_id, parent_id=parid, max_depth=max_depth, limit=500)
+        time.sleep(5) # fix ratelimit problems
         self.log.debug(f"Got {len(replies)} replies to pv")
         for r in replies:
             if "post_view" in r:
@@ -231,7 +232,7 @@ class BotThread(threading.Thread):
                 continue
             if attempts >= self.max_replies:
                 break
-            random.seed(parent_id)
+            random.seed(parent_id*int.from_bytes(self.cfg["username"].encode("utf-8"), byteorder="big", signed=False))
             if random.randint(1, 100) < self.roll_needed:
                 continue
             reply = ""
@@ -253,7 +254,6 @@ class BotThread(threading.Thread):
         while not self.stop_event.is_set():
             try:
                 now = time.time()
-
                 # (1) Post new thread – immediate on startup if initial_post=True
                 if self.initial_post or (now - self.last_post_at) >= self.freq_s:
                     # Try to generate a title up to 3 times
