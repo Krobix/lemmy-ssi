@@ -59,6 +59,8 @@ class BotThread(threading.Thread):
         job = LSSIJob(bot=self, prompt=prompt, post_id=post_id, parent_id=parent_id)
         self.jobs.append(job)
         self.genq.put(job)
+        if parent_id is not None:
+            self.replied_to.append(parent_id)
 
     def is_toxic(self, txt: str, thresh: float = 0.9) -> bool:
         if not self.filter_toxic:
