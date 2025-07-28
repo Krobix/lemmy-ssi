@@ -13,7 +13,7 @@ SortType = get_sort_type()
 #  Bot Thread                                                      #
 # ------------------------------------------------------------------ #
 class BotThread(threading.Thread):
-    def __init__(self, bot_cfg: MappingProxyType, global_cfg: MappingProxyType, genlock):
+    def __init__(self, bot_cfg: MappingProxyType, global_cfg: MappingProxyType, genlock, loadlock):
         super().__init__(daemon=True, name=bot_cfg["name"])
         self.cfg = bot_cfg
         self.global_cfg = global_cfg
@@ -28,14 +28,7 @@ class BotThread(threading.Thread):
         self.nsfw = self.cfg["nsfw"]
 
         # Model + tokenizer
-        from transformers import AutoTokenizer, AutoModelForCausalLM
-        if bot_cfg["model"].endswith("gguf"):
-            self.model = llama.Llama(bot_cfg["model"], use_mmap=True, use_mlock=True, n_ctx=1024, n_batch=1024, n_threads=6, n_threads_batch=12)
-        else:
-            self.tokenizer = AutoTokenizer.from_pretrained(bot_cfg["model"])
-            self.tokenizer.padding_side = "left"
-            self.model = AutoModelForCausalLM.from_pretrained(bot_cfg["model"])
-            self.model.eval()
+        self.model = None
 
         # Toxicity
         self.filter_toxic = bool(global_cfg.get("toxicity_filter", True))
@@ -62,6 +55,18 @@ class BotThread(threading.Thread):
 
         self.stop_event = threading.Event()
         self.genlock = genlock
+        self.loadlock = loadlock
+
+    def _load_model(self):
+        from transformers import AutoTokenizer, AutoModelForCausalLM
+        if self.cfg["model"].endswith("gguf"):
+            self.model = llama.Llama(self.cfg["model"], use_mmap=True, use_mlock=True, n_ctx=1024, n_batch=1024,
+                                     n_threads=6, n_threads_batch=12)
+        else:
+            self.tokenizer = AutoTokenizer.from_pretrained(self.cfg["model"])
+            self.tokenizer.padding_side = "left"
+            self.model = AutoModelForCausalLM.from_pretrained(self.cfg["model"])
+            self.model.eval()
 
     def _is_toxic(self, txt: str, thresh: float = 0.9) -> bool:
         if not self.filter_toxic:
@@ -74,7 +79,10 @@ class BotThread(threading.Thread):
     def _gen(self, prompt: str) -> str:
         import warnings
         random.seed()
+        self.loadlock.acquire()
+        self._load_model()
         with self.genlock:
+            self.loadlock.release()
             self.log.debug(f"Prompt:\n{prompt}\n\n")
             if type(self.model) is not llama.Llama:
                 inputs = self.tokenizer(prompt, return_tensors="pt")
@@ -106,6 +114,7 @@ class BotThread(threading.Thread):
                                 try:
                                     prompt = self.model.detokenize(tokens).decode("utf-8")
                                 except UnicodeDecodeError:
+                                    del self.model
                                     return ""
                                 out = self.model(prompt=prompt, temperature=float(temp), max_tokens=1024, stop=["<|"], seed=random.randint(0, 1000))["choices"][0]["text"]
                                 out = str(out)
@@ -133,13 +142,16 @@ class BotThread(threading.Thread):
                 gen_ids = out[len(prompt):]
                 for b in self.badwords:
                     if b in out:
+                        del self.model
                         return ""
                 #txt = clean(self.tokenizer.decode(gen_ids, skip_special_tokens=True))
                 txt = out
                 while "\\n" in txt:
                     txt = txt.replace("\\n", " ")
                 if txt and not self._is_toxic(txt):
+                    del self.model
                     return txt
+            del self.model
             return ""
 
     def _post(self, title: str, body: str) -> int | None:
