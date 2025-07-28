@@ -16,7 +16,7 @@ RUN chown -R 989:987 /.cache
 
 USER 989:987
 
-ADD --chown=989:987 main.py config.yaml util.py bot_thread.py /lemmy-ssi/
+ADD --chown=989:987 main.py config.yaml util.py bot_thread.py gen_thread.py /lemmy-ssi/
 
 VOLUME /models
 

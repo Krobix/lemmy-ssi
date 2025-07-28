@@ -4,8 +4,8 @@ import torch
 import time
 from detoxify import Detoxify
 from pythorhead import Lemmy
-import llama_cpp as llama
 from util import *
+from gen_thread import LSSIJob
 
 SortType = get_sort_type()
 
@@ -13,7 +13,7 @@ SortType = get_sort_type()
 #  Bot Thread                                                      #
 # ------------------------------------------------------------------ #
 class BotThread(threading.Thread):
-    def __init__(self, bot_cfg: MappingProxyType, global_cfg: MappingProxyType, genlock, loadlock):
+    def __init__(self, bot_cfg: MappingProxyType, global_cfg: MappingProxyType, genq):
         super().__init__(daemon=True, name=bot_cfg["name"])
         self.cfg = bot_cfg
         self.global_cfg = global_cfg
@@ -27,8 +27,8 @@ class BotThread(threading.Thread):
         self.subreplace = self.cfg["subreplace"].strip().split(",")
         self.nsfw = self.cfg["nsfw"]
 
-        # Model + tokenizer
-        self.model = None
+        self.genq = genq
+        self.jobs = []
 
         # Toxicity
         self.filter_toxic = bool(global_cfg.get("toxicity_filter", True))
@@ -54,105 +54,19 @@ class BotThread(threading.Thread):
         self.comm_this_period = 0
 
         self.stop_event = threading.Event()
-        self.genlock = genlock
-        self.loadlock = loadlock
 
-    def _load_model(self):
-        from transformers import AutoTokenizer, AutoModelForCausalLM
-        if self.cfg["model"].endswith("gguf"):
-            self.model = llama.Llama(self.cfg["model"], use_mmap=True, use_mlock=True, n_ctx=1024, n_batch=1024,
-                                     n_threads=6, n_threads_batch=12)
-        else:
-            self.tokenizer = AutoTokenizer.from_pretrained(self.cfg["model"])
-            self.tokenizer.padding_side = "left"
-            self.model = AutoModelForCausalLM.from_pretrained(self.cfg["model"])
-            self.model.eval()
+    def _add_job(self, prompt=None, post_id=None, parent_id=None):
+        job = LSSIJob(bot=self, prompt=prompt, post_id=post_id, parent_id=parent_id)
+        self.jobs.append(job)
+        self.genq.put(job)
 
-    def _is_toxic(self, txt: str, thresh: float = 0.9) -> bool:
+    def is_toxic(self, txt: str, thresh: float = 0.9) -> bool:
         if not self.filter_toxic:
             return False
         try:
             return any(v > thresh for v in self.detox.predict(txt).values())
         except Exception:
             return False
-
-    def _gen(self, prompt: str) -> str:
-        import warnings
-        random.seed()
-        self.loadlock.acquire()
-        self._load_model()
-        with self.genlock:
-            self.loadlock.release()
-            self.log.debug(f"Prompt:\n{prompt}\n\n")
-            if type(self.model) is not llama.Llama:
-                inputs = self.tokenizer(prompt, return_tensors="pt")
-                ids = inputs.input_ids
-                attn = inputs.get("attention_mask", None)
-                # empty‑prompt fallback
-                if not prompt.strip() or ids.size(1) == 0:
-                    bos = self.tokenizer.bos_token_id or self.tokenizer.eos_token_id
-                    ids = torch.tensor([[bos]], device=ids.device)
-                    prompt_len = 1
-                    attn = torch.ones_like(ids)
-                else:
-                    prompt_len = ids.size(1)
-            else:
-                prompt_len = len(self.model.tokenize(prompt.encode('utf-8')))
-            temp = random.uniform(float(self.temprange[0]), float(self.temprange[1]))
-
-            max_new = max(16, 1024 - prompt_len)
-            for _ in range(4):
-                with torch.no_grad():
-                    with warnings.catch_warnings():
-                        warnings.filterwarnings("ignore", category=UserWarning)
-                        if type(self.model) is llama.Llama:
-                            try:
-                                tokens = self.model.tokenize(prompt.encode("utf-8"))
-                                tokens.reverse()
-                                tokens = tokens[:1000]
-                                tokens.reverse()
-                                try:
-                                    prompt = self.model.detokenize(tokens).decode("utf-8")
-                                except UnicodeDecodeError:
-                                    del self.model
-                                    return ""
-                                out = self.model(prompt=prompt, temperature=float(temp), max_tokens=1024, stop=["<|"], seed=random.randint(0, 1000))["choices"][0]["text"]
-                                out = str(out)
-                            except RuntimeError:
-                                continue
-                            #if out.endswith("<|"):
-                            #    out = out[:len(out) - 2]
-                            #if prompt.endswith("<|sot|>") and prompt.startswith("<|soss"):
-                            #    logging.info("Title generated for text post, proceeding to generate text post body")
-                            #    out = str(out) + "<|eot|><|sost|>"
-                            #    out += str(self.model(prompt=out, temperature=float(temp), max_tokens=1024,
-                            #                        stop=["<|"])["choices"][0]["text"])
-                            #if not out.endswith("<|"):
-                            #    out += "<|"
-                        else:
-                            out = self.model.generate(
-                                ids,
-                                attention_mask=attn,
-                                max_new_tokens=max_new,
-                                do_sample=True,
-                                temperature=0.9,
-                                top_p=0.9,
-                                pad_token_id=self.tokenizer.eos_token_id,
-                            )
-                gen_ids = out[len(prompt):]
-                for b in self.badwords:
-                    if b in out:
-                        del self.model
-                        return ""
-                #txt = clean(self.tokenizer.decode(gen_ids, skip_special_tokens=True))
-                txt = out
-                while "\\n" in txt:
-                    txt = txt.replace("\\n", " ")
-                if txt and not self._is_toxic(txt):
-                    del self.model
-                    return txt
-            del self.model
-            return ""
 
     def _post(self, title: str, body: str) -> int | None:
         try:
@@ -247,18 +161,10 @@ class BotThread(threading.Thread):
             random.seed(parent_id*int.from_bytes(self.cfg["username"].encode("utf-8"), byteorder="big", signed=False))
             if random.randint(1, 100) < self.roll_needed:
                 continue
-            reply = ""
-            for _ in range(3):
-                candidate = self._gen(p).strip()
-                if candidate:
-                    reply = candidate
-                    break
-            if not reply:
-                continue
             if "comment" in src:
-                self._comment(src["comment"]["post_id"], reply, parent_id=src["comment"]["id"])
+                self._add_job(prompt=p, post_id=src["comment"]["post_id"], parent_id=src["comment"]["id"])
             else:
-                self._comment(src["post"]["id"], reply, parent_id=src["post"]["id"])
+                self._add_job(prompt=p, post_id=src["post"]["id"], parent_id=src["post"]["id"])
             attempts += 1
             time.sleep(random.uniform(self.delay_min, self.delay_max))
 
@@ -270,33 +176,8 @@ class BotThread(threading.Thread):
                 if self.initial_post or (now - self.last_post_at) >= self.freq_s:
                     # Try to generate a title up to 3 times
                     self.comm_this_period = 0
-                    title = ""
-                    sub = random.choice(self.subreplace)
-                    for _ in range(3):
-                        raw = self._gen(f"<|soss r/{sub}|><|sot|>")
-                        c = raw.splitlines()[0][:200].strip()
-                        c = re.sub(r"[<>|].*?$", "", c)
-                        if c and c != "Untitled 🤔":
-                            title = c
-                            break
-                    # If still empty, seed the model with "Vile Asslips"
-                    if not title:
-                        seed = "Vile Asslips"
-                        fb = self._gen(seed).splitlines()[0][:200].strip()
-                        title = fb or seed
 
-                    # generate body by using title as the prompt
-                    body = ""
-                    for _ in range(3):
-                        candidate = self._gen(f"<|soss r/{sub}|><|sot|>{title}<|eot|><|sost|>").strip()
-                        # ensure it didn’t just echo the title
-                        if candidate and candidate.lower() != title.lower():
-                            body = candidate
-                            break
-                    if not body:
-                        body = " "  # Lemmy requires non‑empty
-
-                    self._post(title, body)
+                    self._add_job()
                     self.last_post_at = now
                     self.initial_post = False  # only run once
 
@@ -325,6 +206,20 @@ class BotThread(threading.Thread):
                             continue
                         comments.append(cv)
                     self._attempt_replies(comments, sub=sub)
+
+                #check for complete jobs
+                for i in range(len(self.jobs)):
+                    job = self.jobs.pop(0)
+                    if job.complete_lock.acquire(blocking=False):
+                        if job.parent_id is not None:
+                            body = job.output_body
+                            if body=="":
+                                continue
+                            self._comment(job.post_id, body, parent_id=job.parent_id)
+                        else:
+                            self._post(job.output_title, job.output_body)
+                    else:
+                        self.jobs.append(job)
 
                 time.sleep(300)
             except Exception as e:
