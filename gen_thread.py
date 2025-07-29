@@ -104,8 +104,12 @@ class LSSIJob:
     def gen_post(self):
         title = ""
         sub = random.choice(self.bot.subreplace)
+        selfsub = random.randint(0, 100) < 70
         for _ in range(3):
-            raw = self.gen(f"<|soss r/{sub}|><|sot|>")
+            if selfsub:
+                raw = self.gen(f"<|soss r/{sub}|><|sot|>")
+            else:
+                raw = self.gen(f"<|sols r/{sub}|><|sot|>")
             c = raw.splitlines()[0][:200].strip()
             c = re.sub(r"[<>|].*?$", "", c)
             if c and c != "Untitled 🤔":
@@ -119,14 +123,15 @@ class LSSIJob:
 
         # generate body by using title as the prompt
         body = ""
-        for _ in range(3):
-            candidate = self.gen(f"<|soss r/{sub}|><|sot|>{title}<|eot|><|sost|>").strip()
-            # ensure it didn’t just echo the title
-            if candidate and candidate.lower() != title.lower():
-                body = candidate
-                break
-        if not body:
-            body = " "  # Lemmy requires non‑empty
+        if selfsub:
+            for _ in range(3):
+                candidate = self.gen(f"<|soss r/{sub}|><|sot|>{title}<|eot|><|sost|>").strip()
+                # ensure it didn’t just echo the title
+                if candidate and candidate.lower() != title.lower():
+                    body = candidate
+                    break
+            if not body:
+                body = " "  # Lemmy requires non‑empty
 
         self.output_body = body
         self.output_title = title

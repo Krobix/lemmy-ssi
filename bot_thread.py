@@ -225,4 +225,4 @@ class BotThread(threading.Thread):
 
                 time.sleep(300)
             except Exception as e:
-                self.log.error(e)
+                self.log.error(repr(e))
