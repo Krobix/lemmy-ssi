@@ -212,7 +212,7 @@ class BotThread(threading.Thread):
                     cfeed = []
 
                     for p in posts:
-                        for c in self.lemmy.comment.list(post_id=p["post"]["id"], max_depth=15, sort=pythorhead.types.CommentSortType.Hot, type_="All"):
+                        for c in self.lemmy.comment.list(post_id=p["post"]["id"], max_depth=15, sort=pythorhead.types.CommentSortType.Hot, type_=pythorhead.types.listing.ListingType.All):
                             cfeed.append(c)
                             time.sleep(3)
                     comments = []
