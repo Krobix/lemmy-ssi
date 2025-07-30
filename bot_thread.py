@@ -2,6 +2,8 @@ import threading, logging, random
 from types import MappingProxyType
 import traceback
 import time
+
+import pythorhead.types
 from detoxify import Detoxify
 from pythorhead import Lemmy
 from util import *
@@ -210,7 +212,7 @@ class BotThread(threading.Thread):
                     cfeed = []
 
                     for p in posts:
-                        for c in self.lemmy.comment.list(post_id=p["post"]["id"], limit=self.roll_needed*2):
+                        for c in self.lemmy.comment.list(post_id=p["post"]["id"], max_depth=15, sort=pythorhead.types.CommentSortType.Hot, type_="All"):
                             cfeed.append(c)
                             time.sleep(3)
                     comments = []
