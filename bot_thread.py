@@ -207,10 +207,12 @@ class BotThread(threading.Thread):
                     sub = random.choice(self.subreplace)
                     self._attempt_replies(posts, sub=sub)
 
-                    cfeed = self.lemmy.comment.list(
-                        community_id=self.community_id,
-                        sort=SortType.New, page=1, limit=self.max_replies * 3
-                    )
+                    cfeed = []
+
+                    for p in posts:
+                        for c in self.lemmy.comment.list(post_id=p["post"]["id"], limit=self.roll_needed*2):
+                            cfeed.append(c)
+                            time.sleep(3)
                     comments = []
                     for cv in iter_comment_views(cfeed):
                         if self._already_replied(cv):
