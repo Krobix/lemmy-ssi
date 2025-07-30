@@ -64,7 +64,10 @@ def convert_post(title, text, sub, is_self=True, end_tag=False):
     return out
 
 def convert_thread(post, replies, sub, is_self=True):
-    out = convert_post(post["post"]["name"], post["post"]["body"], sub, end_tag=False)
+    if "body" in post:
+        out = convert_post(post["post"]["name"], post["post"]["body"], sub, end_tag=False)
+    else:
+        out = convert_post(post["post"]["name"], None, sub, is_self=False, end_tag=False)
     if out is None:
         return None
 

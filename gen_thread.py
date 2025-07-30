@@ -130,8 +130,8 @@ class LSSIJob:
                 if candidate and candidate.lower() != title.lower():
                     body = candidate
                     break
-            if not body:
-                body = " "  # Lemmy requires non‑empty
+        if not body:
+            body = " "  # Lemmy requires non‑empty
 
         self.output_body = body
         self.output_title = title
@@ -139,8 +139,10 @@ class LSSIJob:
     def run(self):
         if self.prompt is None:
             self.gen_post()
+            self.bot.post(title=self.output_title, body=self.output_body)
         else:
             self.output_body = self.gen(prompt=self.prompt)
+            self.bot.comment(self.post_id, self.output_body, self.parent_id)
         self.complete_lock.release()
 
 class GenThread(threading.Thread):

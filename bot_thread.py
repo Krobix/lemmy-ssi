@@ -1,6 +1,6 @@
 import threading, logging, random
 from types import MappingProxyType
-import torch
+import traceback
 import time
 from detoxify import Detoxify
 from pythorhead import Lemmy
@@ -57,7 +57,7 @@ class BotThread(threading.Thread):
 
     def _add_job(self, prompt=None, post_id=None, parent_id=None):
         job = LSSIJob(bot=self, prompt=prompt, post_id=post_id, parent_id=parent_id)
-        self.jobs.append(job)
+        #self.jobs.append(job)
         self.genq.put(job)
         if parent_id is not None:
             self.replied_to.append(parent_id)
@@ -70,7 +70,7 @@ class BotThread(threading.Thread):
         except Exception:
             return False
 
-    def _post(self, title: str, body: str) -> int | None:
+    def post(self, title: str, body: str) -> int | None:
         try:
             res = self.lemmy.post.create(self.community_id, title, body=body, nsfw=self.nsfw)
             pid = res["post_view"]["post"]["id"]
@@ -80,7 +80,7 @@ class BotThread(threading.Thread):
             self.log.exception("post failed")
             return None
 
-    def _comment(self, post_id: int, content: str, parent_id: int | None = None) -> None:
+    def comment(self, post_id: int, content: str, parent_id: int | None = None) -> None:
         try:
             self.lemmy.comment.create(post_id, content, parent_id=parent_id)
             self.log.info("Commented on %d", post_id)
@@ -123,7 +123,7 @@ class BotThread(threading.Thread):
         if parent_id in self.replied_to:
             return True
 
-        replies = self.lemmy.comment.list(post_id=post_id, parent_id=parid, max_depth=max_depth, limit=500)
+        replies = self.lemmy.comment.list(post_id=post_id, parent_id=parid, max_depth=max_depth)
         time.sleep(5) # fix ratelimit problems
         self.log.debug(f"Got {len(replies)} replies to pv")
         for r in replies:
@@ -139,9 +139,18 @@ class BotThread(threading.Thread):
                 return True
         return False
 
+    def _comment_num(self, cv):
+        if "comment" in cv:
+            post_id = cv["comment"]["post_id"]
+        else:
+            post_id = cv["post"]["id"]
+        return len(self.lemmy.comment.list(post_id=post_id, max_depth=15))
+
     def _attempt_replies(self, sources: list[dict[str, Any]], sub) -> None:
         attempts = 0
         for src in sources:
+            base_roll = self.roll_needed
+            base_roll -= (int(self._comment_num(src)/2))
             if src["creator"]["name"] == self.cfg["username"]:
                 continue
             if "comment" in src:
@@ -161,7 +170,7 @@ class BotThread(threading.Thread):
             if attempts >= self.max_replies:
                 break
             random.seed(parent_id*int.from_bytes(self.cfg["username"].encode("utf-8"), byteorder="big", signed=False))
-            if random.randint(1, 100) < self.roll_needed:
+            if random.randint(1, 100) < base_roll:
                 continue
             if "comment" in src:
                 self._add_job(prompt=p, post_id=src["comment"]["post_id"], parent_id=src["comment"]["id"])
@@ -209,20 +218,7 @@ class BotThread(threading.Thread):
                         comments.append(cv)
                     self._attempt_replies(comments, sub=sub)
 
-                #check for complete jobs
-                for i in range(len(self.jobs)):
-                    job = self.jobs.pop(0)
-                    if job.complete_lock.acquire(blocking=False):
-                        if job.parent_id is not None:
-                            body = job.output_body
-                            if body=="":
-                                continue
-                            self._comment(job.post_id, body, parent_id=job.parent_id)
-                        else:
-                            self._post(job.output_title, job.output_body)
-                    else:
-                        self.jobs.append(job)
 
                 time.sleep(300)
             except Exception as e:
-                self.log.error(repr(e))
+                self.log.error(traceback.format_exc())
