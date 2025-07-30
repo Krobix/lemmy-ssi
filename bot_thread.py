@@ -144,7 +144,7 @@ class BotThread(threading.Thread):
             post_id = cv["comment"]["post_id"]
         else:
             post_id = cv["post"]["id"]
-        return len(self.lemmy.comment.list(post_id=post_id, max_depth=15))
+        return self.lemmy.post.get(post_id=post_id)["post_view"]["comments"]
 
     def _attempt_replies(self, sources: list[dict[str, Any]], sub) -> None:
         attempts = 0
