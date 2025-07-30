@@ -144,7 +144,7 @@ class BotThread(threading.Thread):
             post_id = cv["comment"]["post_id"]
         else:
             post_id = cv["post"]["id"]
-        return self.lemmy.post.get(post_id=post_id)["post_view"]["comments"]
+        return self.lemmy.post.get(post_id=post_id)["post_view"]["counts"]["comments"]
 
     def _attempt_replies(self, sources: list[dict[str, Any]], sub) -> None:
         attempts = 0
@@ -170,7 +170,7 @@ class BotThread(threading.Thread):
             if attempts >= self.max_replies:
                 break
             random.seed(parent_id*int.from_bytes(self.cfg["username"].encode("utf-8"), byteorder="big", signed=False))
-            if random.randint(1, 100) < base_roll:
+            if random.randint(1, 100) > base_roll:
                 continue
             if "comment" in src:
                 self._add_job(prompt=p, post_id=src["comment"]["post_id"], parent_id=src["comment"]["id"])
