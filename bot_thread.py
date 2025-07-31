@@ -152,7 +152,7 @@ class BotThread(threading.Thread):
         attempts = 0
         for src in sources:
             base_roll = self.roll_needed
-            base_roll -= (int(self._comment_num(src)/2))
+            base_roll -= (int(self._comment_num(src)))
             if src["creator"]["name"] == self.cfg["username"]:
                 continue
             if "comment" in src:
