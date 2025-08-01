@@ -199,7 +199,7 @@ class BotThread(threading.Thread):
                 # 2) Scan & reply every loop
                 feed = self.lemmy.post.list(
                     page=1, limit=self.max_replies * 3,
-                    sort=SortType.New, community_id=self.community_id
+                    sort=SortType.New, community_id=self.community_id, type_=pythorhead.types.listing.ListingType.All
                 )
                 posts = []
 
