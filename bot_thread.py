@@ -155,7 +155,7 @@ class BotThread(threading.Thread):
             base_roll -= (int(self._comment_num(src)))
             if src["creator"]["name"] == self.cfg["username"]:
                 continue
-            if "GPT2" not in src["creator"]["name"].upper():
+            if not src["creator"]["bot_account"]:
                 base_roll += self.roll_needed/2
             if "comment" in src:
                 post, replies = self._org_thread(src)
