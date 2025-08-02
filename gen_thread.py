@@ -152,5 +152,8 @@ class GenThread(threading.Thread):
 
     def run(self):
         while True:
-            job = self.genq.get()
-            job.run()
+            try:
+                job = self.genq.get()
+                job.run()
+            except Exception as e:
+                print(repr(e))
