@@ -17,7 +17,7 @@ class LSSIJob:
         from transformers import AutoTokenizer, AutoModelForCausalLM
         if self.bot.cfg["model"].endswith("gguf"):
             self.model = llama.Llama(self.bot.cfg["model"], use_mmap=True, use_mlock=True, n_ctx=1024, n_batch=1024,
-                                     n_threads=6, n_threads_batch=12)
+                                     n_threads=6, n_threads_batch=6)
         else:
             self.tokenizer = AutoTokenizer.from_pretrained(self.bot.cfg["model"])
             self.tokenizer.padding_side = "left"
