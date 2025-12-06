@@ -61,6 +61,7 @@ class BotThread(threading.Thread):
         job = LSSIJob(bot=self, prompt=prompt, post_id=post_id, parent_id=parent_id)
         #self.jobs.append(job)
         self.genq.put(job)
+        print(f"Job added: {prompt}")
         if parent_id is not None:
             self.replied_to.append(parent_id)
 
@@ -175,6 +176,7 @@ class BotThread(threading.Thread):
             else:
                 continue
             if attempts >= self.max_replies:
+                print("Too many attempts!")
                 break
             random.seed(parent_id*int.from_bytes(self.cfg["username"].encode("utf-8"), byteorder="big", signed=False))
             if random.randint(1, 100) > base_roll:
