@@ -23,7 +23,7 @@ class BotThread(threading.Thread):
 
         # Lemmy login
         self.lemmy = Lemmy(global_cfg["instance"])
-        self.lemmy.log_in(bot_cfg["username"], bot_cfg["password"])
+        self.lemmy.log_in(bot_cfg["username"].strip(), bot_cfg["password"].strip())
         self.community_id = self.lemmy.discover_community(global_cfg["community"])
 
         self.subreplace = self.cfg["subreplace"].strip().split(",")
