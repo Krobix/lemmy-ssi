@@ -85,7 +85,10 @@ class BotThread(threading.Thread):
 
     def comment(self, post_id: int, content: str, parent_id: int | None = None) -> None:
         try:
-            self.lemmy.comment.create(post_id, content, parent_id=parent_id)
+            if parent_id != post_id:
+                self.lemmy.comment.create(post_id, content, parent_id=parent_id)
+            else:
+                self.lemmy.comment.create(post_id, content)
             self.log.info("Commented on %d", post_id)
             self.comm_this_period += 1
         except Exception:
